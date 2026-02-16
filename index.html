@@ -157,7 +157,6 @@
             position: absolute;
             width: 3000px;
             height: 2000px;
-            transition: transform 0.1s linear;
         }
 
         /* Village Background */
@@ -424,7 +423,6 @@
             justify-content: center;
             font-size: 2rem;
             z-index: 50;
-            transition: transform 0.1s ease;
         }
 
         .player.moving {
@@ -718,9 +716,141 @@
                 font-size: 2.5rem;
             }
         }
+
+        /* Welcome Screen for Game */
+        .game-welcome-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: linear-gradient(135deg, var(--midnight) 0%, var(--night-blue) 50%, var(--sacred-purple) 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
+        }
+
+        .game-welcome-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .game-welcome-om {
+            font-size: 6rem;
+            color: var(--temple-gold);
+            margin-bottom: 2rem;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .game-welcome-title {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(2.5rem, 8vw, 6rem);
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--sacred-orange), var(--temple-gold), var(--deep-saffron));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-align: center;
+            margin-bottom: 1rem;
+            letter-spacing: 0.05em;
+            animation: welcomeGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes welcomeGlow {
+            0%, 100% { filter: drop-shadow(0 0 30px rgba(255, 107, 53, 0.5)); }
+            50% { filter: drop-shadow(0 0 50px rgba(255, 107, 53, 0.8)); }
+        }
+
+        .game-welcome-subtitle {
+            font-family: 'Cinzel', serif;
+            font-size: 1.5rem;
+            color: var(--ash-grey);
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+
+        .game-start-button {
+            padding: 1.5rem 4rem;
+            font-family: 'Cinzel', serif;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--midnight);
+            background: linear-gradient(135deg, var(--temple-gold), var(--sacred-orange));
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            box-shadow: 0 10px 40px rgba(255, 107, 53, 0.4);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .game-start-button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .game-start-button:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .game-start-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 15px 60px rgba(255, 107, 53, 0.6);
+        }
+
+        .game-start-button:active {
+            transform: scale(1.05);
+        }
+
+        .game-button-text {
+            position: relative;
+            z-index: 1;
+        }
+
+        .game-content {
+            opacity: 0;
+            transition: opacity 1s ease 0.3s;
+        }
+
+        .game-content.visible {
+            opacity: 1;
+        }
     </style>
 </head>
 <body>
+    <!-- Welcome Screen for Game -->
+    <div class="game-welcome-screen" id="gameWelcomeScreen">
+        <div class="game-welcome-om">🕉️</div>
+        <h1 class="game-welcome-title">Shiva Special</h1>
+        <p class="game-welcome-subtitle">Puja Quest Adventure</p>
+        <button class="game-start-button" onclick="startGame()">
+            <span class="game-button-text">Start Learning</span>
+        </button>
+    </div>
+
+    <!-- Game Content -->
+    <div class="game-content" id="gameContent">
     <div class="game-header">
         <div class="game-title">🕉️ Shiva Special - Puja Quest</div>
         <div>
@@ -866,14 +996,30 @@
             </div>
         </div>
     </div>
+    </div>
 
     <script>
+        // Welcome Screen
+        function startGame() {
+            const welcomeScreen = document.getElementById('gameWelcomeScreen');
+            const gameContent = document.getElementById('gameContent');
+            
+            welcomeScreen.classList.add('hidden');
+            setTimeout(() => {
+                gameContent.classList.add('visible');
+                // Initialize camera and start game loop after transition
+                updateCamera();
+                gameLoop();
+            }, 300);
+        }
+
         // Game State
         let playerPos = { x: 1475, y: 975 }; // Start near center
         let cameraPos = { x: 0, y: 0 };
         let collectedItems = new Set();
-        const moveSpeed = 20;
-        let isMoving = false;
+        const moveSpeed = 5; // Pixels per frame
+        let keys = {};
+        let animationId = null;
 
         const viewport = document.getElementById('viewport');
         const gameWorld = document.getElementById('gameWorld');
@@ -883,35 +1029,38 @@
         player.style.left = playerPos.x + 'px';
         player.style.top = playerPos.y + 'px';
 
-        function movePlayer(direction) {
-            isMoving = true;
-            player.classList.add('moving');
+        function gameLoop() {
+            let moved = false;
 
-            switch(direction) {
-                case 'up':
-                    playerPos.y = Math.max(25, playerPos.y - moveSpeed);
-                    break;
-                case 'down':
-                    playerPos.y = Math.min(1975, playerPos.y + moveSpeed);
-                    break;
-                case 'left':
-                    playerPos.x = Math.max(25, playerPos.x - moveSpeed);
-                    break;
-                case 'right':
-                    playerPos.x = Math.min(2975, playerPos.x + moveSpeed);
-                    break;
+            // Check all movement keys
+            if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                playerPos.y = Math.max(25, playerPos.y - moveSpeed);
+                moved = true;
+            }
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+                playerPos.y = Math.min(1975, playerPos.y + moveSpeed);
+                moved = true;
+            }
+            if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+                playerPos.x = Math.max(25, playerPos.x - moveSpeed);
+                moved = true;
+            }
+            if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+                playerPos.x = Math.min(2975, playerPos.x + moveSpeed);
+                moved = true;
             }
 
-            player.style.left = playerPos.x + 'px';
-            player.style.top = playerPos.y + 'px';
-
-            updateCamera();
-            checkCollision();
-
-            setTimeout(() => {
-                isMoving = false;
+            if (moved) {
+                player.style.left = playerPos.x + 'px';
+                player.style.top = playerPos.y + 'px';
+                player.classList.add('moving');
+                updateCamera();
+                checkCollision();
+            } else {
                 player.classList.remove('moving');
-            }, 100);
+            }
+
+            animationId = requestAnimationFrame(gameLoop);
         }
 
         function updateCamera() {
@@ -1002,34 +1151,37 @@
         }
 
         // Keyboard controls
-        const keys = {};
-
         document.addEventListener('keydown', (e) => {
+            // Prevent default for arrow keys and game keys
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(e.key)) {
+                e.preventDefault();
+            }
+            
             keys[e.key] = true;
             
-            if (!isMoving) {
-                if (keys['ArrowUp'] || keys['w'] || keys['W']) {
-                    e.preventDefault();
-                    movePlayer('up');
-                } else if (keys['ArrowDown'] || keys['s'] || keys['S']) {
-                    e.preventDefault();
-                    movePlayer('down');
-                } else if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
-                    e.preventDefault();
-                    movePlayer('left');
-                } else if (keys['ArrowRight'] || keys['d'] || keys['D']) {
-                    e.preventDefault();
-                    movePlayer('right');
-                } else if (keys['r'] || keys['R']) {
-                    e.preventDefault();
-                    resetGame();
-                }
+            // Reset on R key
+            if (e.key === 'r' || e.key === 'R') {
+                resetGame();
             }
         });
 
         document.addEventListener('keyup', (e) => {
             keys[e.key] = false;
         });
+
+        // Button controls for mobile/clicking
+        function movePlayer(direction) {
+            keys[direction === 'up' ? 'ArrowUp' : 
+                 direction === 'down' ? 'ArrowDown' :
+                 direction === 'left' ? 'ArrowLeft' : 'ArrowRight'] = true;
+            
+            setTimeout(() => {
+                keys['ArrowUp'] = false;
+                keys['ArrowDown'] = false;
+                keys['ArrowLeft'] = false;
+                keys['ArrowRight'] = false;
+            }, 200);
+        }
 
         // Fullscreen toggle
         function toggleFullscreen() {
@@ -1040,8 +1192,9 @@
             }
         }
 
-        // Initialize camera
+        // Initialize camera and start game loop
         updateCamera();
+        gameLoop();
 
         // Handle window resize
         window.addEventListener('resize', updateCamera);
